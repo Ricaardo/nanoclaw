@@ -33,31 +33,30 @@ describe('JID ownership patterns', () => {
 // --- getAvailableGroups ---
 
 describe('getAvailableGroups', () => {
-  it('returns only @g.us JIDs', () => {
-    storeChatMetadata('group1@g.us', '2024-01-01T00:00:01.000Z', 'Group 1');
-    storeChatMetadata('user@s.whatsapp.net', '2024-01-01T00:00:02.000Z', 'User DM');
-    storeChatMetadata('group2@g.us', '2024-01-01T00:00:03.000Z', 'Group 2');
+  it('returns only imessage: JIDs', () => {
+    storeChatMetadata('imessage:+1234567890', '2024-01-01T00:00:01.000Z', 'Chat 1');
+    storeChatMetadata('imessage:+0987654321', '2024-01-01T00:00:02.000Z', 'Chat 2');
 
     const groups = getAvailableGroups();
     expect(groups).toHaveLength(2);
-    expect(groups.every((g) => g.jid.endsWith('@g.us'))).toBe(true);
+    expect(groups.every((g) => g.jid.startsWith('imessage:'))).toBe(true);
   });
 
   it('excludes __group_sync__ sentinel', () => {
     storeChatMetadata('__group_sync__', '2024-01-01T00:00:00.000Z');
-    storeChatMetadata('group@g.us', '2024-01-01T00:00:01.000Z', 'Group');
+    storeChatMetadata('imessage:+1234567890', '2024-01-01T00:00:01.000Z', 'Chat');
 
     const groups = getAvailableGroups();
     expect(groups).toHaveLength(1);
-    expect(groups[0].jid).toBe('group@g.us');
+    expect(groups[0].jid).toBe('imessage:+1234567890');
   });
 
   it('marks registered groups correctly', () => {
-    storeChatMetadata('reg@g.us', '2024-01-01T00:00:01.000Z', 'Registered');
-    storeChatMetadata('unreg@g.us', '2024-01-01T00:00:02.000Z', 'Unregistered');
+    storeChatMetadata('imessage:+1111111111', '2024-01-01T00:00:01.000Z', 'Registered');
+    storeChatMetadata('imessage:+2222222222', '2024-01-01T00:00:02.000Z', 'Unregistered');
 
     _setRegisteredGroups({
-      'reg@g.us': {
+      'imessage:+1111111111': {
         name: 'Registered',
         folder: 'registered',
         trigger: '@Andy',
@@ -66,22 +65,22 @@ describe('getAvailableGroups', () => {
     });
 
     const groups = getAvailableGroups();
-    const reg = groups.find((g) => g.jid === 'reg@g.us');
-    const unreg = groups.find((g) => g.jid === 'unreg@g.us');
+    const reg = groups.find((g) => g.jid === 'imessage:+1111111111');
+    const unreg = groups.find((g) => g.jid === 'imessage:+2222222222');
 
     expect(reg?.isRegistered).toBe(true);
     expect(unreg?.isRegistered).toBe(false);
   });
 
   it('returns groups ordered by most recent activity', () => {
-    storeChatMetadata('old@g.us', '2024-01-01T00:00:01.000Z', 'Old');
-    storeChatMetadata('new@g.us', '2024-01-01T00:00:05.000Z', 'New');
-    storeChatMetadata('mid@g.us', '2024-01-01T00:00:03.000Z', 'Mid');
+    storeChatMetadata('imessage:+1111111111', '2024-01-01T00:00:01.000Z', 'Old');
+    storeChatMetadata('imessage:+2222222222', '2024-01-01T00:00:05.000Z', 'New');
+    storeChatMetadata('imessage:+3333333333', '2024-01-01T00:00:03.000Z', 'Mid');
 
     const groups = getAvailableGroups();
-    expect(groups[0].jid).toBe('new@g.us');
-    expect(groups[1].jid).toBe('mid@g.us');
-    expect(groups[2].jid).toBe('old@g.us');
+    expect(groups[0].jid).toBe('imessage:+2222222222');
+    expect(groups[1].jid).toBe('imessage:+3333333333');
+    expect(groups[2].jid).toBe('imessage:+1111111111');
   });
 
   it('returns empty array when no chats exist', () => {

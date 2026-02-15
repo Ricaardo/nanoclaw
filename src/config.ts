@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Andy';
@@ -53,3 +54,11 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// iMessage configuration
+export const IMESSAGE_ONLY = process.env.IMESSAGE_ONLY === 'true' || true; // Default to iMessage only
+export const IMESSAGE_CLI_PATH =
+  process.env.IMESSAGE_CLI_PATH || '/usr/local/bin/imsg';
+export const IMESSAGE_DB_PATH =
+  process.env.IMESSAGE_DB_PATH ||
+  path.join(os.homedir(), 'Library/Messages/chat.db');
