@@ -62,3 +62,45 @@ export const IMESSAGE_CLI_PATH =
 export const IMESSAGE_DB_PATH =
   process.env.IMESSAGE_DB_PATH ||
   path.join(os.homedir(), 'Library/Messages/chat.db');
+
+// API Server configuration
+export const API_HOST = process.env.API_HOST || '0.0.0.0';  // 默认允许局域网访问
+export const API_PORT = parseInt(process.env.API_PORT || '3456', 10);
+export const API_KEY = process.env.NANOCLAW_API_KEY;
+export const API_UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+export const API_DOWNLOAD_DIR = path.join(DATA_DIR, 'downloads');
+export const API_MAX_FILE_SIZE = parseInt(process.env.API_MAX_FILE_SIZE || '52428800', 10); // 50MB
+export const API_ALLOWED_EXTENSIONS = [
+  '.pdf', '.txt', '.md', '.json', '.zip', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.docx'
+];
+
+// API Runner mode: "container" (default) or "local" (use local Claude CLI)
+export const API_RUNNER_MODE = process.env.API_RUNNER_MODE || 'local';
+// Path to local Claude CLI (auto-detected if not set)
+export const CLAUDE_CLI_PATH = process.env.CLAUDE_CLI_PATH || 'claude';
+// Working directory for API requests
+export const API_WORK_DIR = process.env.API_WORK_DIR || path.join(DATA_DIR, '..', 'groups', 'main');
+
+// Supported models
+export const SUPPORTED_MODELS: Record<string, string> = {
+  'claude-sonnet-4-20250514': 'Claude Sonnet 4',
+  'claude-opus-4-20250514': 'Claude Opus 4',
+  'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+  'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
+  'claude-3-haiku-20240307': 'Claude 3 Haiku',
+};
+export const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+
+// Supported tools
+export const SUPPORTED_TOOLS: Record<string, string> = {
+  'Bash': '执行 shell 命令',
+  'Read': '读取文件',
+  'Edit': '编辑文件',
+  'Write': '写入文件',
+  'Glob': '文件搜索',
+  'Grep': '内容搜索',
+  'WebFetch': '抓取网页',
+  'WebSearch': '网络搜索',
+  'TodoWrite': '任务管理',
+  'Task': '子任务调用',
+};

@@ -42,6 +42,7 @@ import { formatMessages, formatOutbound, findChannel } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { startApiServer } from './api/server.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -468,7 +469,11 @@ function ensureContainerSystemRunning(): void {
 }
 
 async function main(): Promise<void> {
-  ensureContainerSystemRunning();
+  const apiOnly = process.env.API_ONLY === 'true';
+  
+  if (!apiOnly) {
+    ensureContainerSystemRunning();
+  }
   initDatabase();
   logger.info('Database initialized');
   loadState();
@@ -491,17 +496,18 @@ async function main(): Promise<void> {
     registeredGroups: () => registeredGroups,
   };
 
-  // Create and connect iMessage channel
-  if (IMESSAGE_CLI_PATH) {
+  // Create and connect iMessage channel (skip in API-only mode)
+  if (!apiOnly && IMESSAGE_CLI_PATH) {
     const imessage = new IMessageChannel(IMESSAGE_CLI_PATH, IMESSAGE_DB_PATH, channelOpts);
     channels.push(imessage);
     await imessage.connect();
-  } else {
+  } else if (!apiOnly) {
     console.log('\n  Warning: IMESSAGE_CLI_PATH not set, no messaging channel configured');
   }
 
-  // Start subsystems (independently of connection handler)
-  startSchedulerLoop({
+  // Start subsystems (skip in API-only mode)
+  if (!apiOnly) {
+    startSchedulerLoop({
     registeredGroups: () => registeredGroups,
     getSessions: () => sessions,
     queue,
@@ -514,21 +520,22 @@ async function main(): Promise<void> {
       if (text) await channel.sendMessage(jid, text);
     },
   });
-  startIpcWatcher({
-    sendMessage: (jid, text) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      return channel.sendMessage(jid, text);
-    },
-    registeredGroups: () => registeredGroups,
-    registerGroup,
-    syncGroupMetadata: (force: boolean) => Promise.resolve(),
-    getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
-  });
+  }
+
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
-  startMessageLoop();
+  
+  if (!apiOnly) {
+    startMessageLoop();
+  }
+
+  // Start API server (optional, controlled by API_ENABLED)
+  const apiEnabled = process.env.API_ENABLED !== 'false';
+  if (apiEnabled) {
+    await startApiServer();
+  } else {
+    logger.info('API server disabled (API_ENABLED=false)');
+  }
 }
 
 // Guard: only run when executed directly, not when imported by tests
