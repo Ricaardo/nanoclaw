@@ -13,6 +13,7 @@
 9. [部署指南](#部署指南)
 10. [错误处理](#错误处理)
 11. [常见问题](#常见问题)
+12. [Skill 开发指南](./SKILL_DEV.md)
 
 ---
 
@@ -200,7 +201,81 @@ GET /api/tools
 
 ---
 
-### 5. 发送聊天消息 (核心接口)
+### 5. 获取 Skills 列表
+
+获取 NanoClaw 中可用的 Skills 列表。
+
+```http
+GET /api/skills
+```
+
+**响应:**
+```json
+{
+  "skills": [
+    { "name": "debug", "description": "Debug container agent issues" },
+    { "name": "generate-test", "description": "Generate unit tests for code files" },
+    { "name": "setup", "description": "Run initial NanoClaw setup" },
+    { "name": "customize", "description": "Add new capabilities or modify behavior" }
+  ]
+}
+```
+
+---
+
+### 6. 运行 Skill (生成测试用例等)
+
+专门用于运行 Skills 的接口，适合自动化任务，如生成测试用例。
+
+```http
+POST /api/skills/run
+Content-Type: multipart/form-data
+```
+
+**请求参数:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `skill` | string | 是 | Skill 名称 |
+| `message` | string | 是 | 任务描述 |
+| `model` | string | 否 | 模型 ID |
+| `tools` | string | 否 | 逗号分隔的工具列表 |
+| `files` | file[] | 否 | 上传的文件 |
+
+**支持的文件类型:**
+- 代码文件: `.js`, `.ts`, `.jsx`, `.tsx`, `.py`, `.go`, `.java`, `.c`, `.cpp`, `.rs`, `.rb`, `.php`
+- 文档: `.txt`, `.md`, `.json`, `.pdf`
+- 表格: `.csv`, `.xlsx`
+- 图片: `.png`, `.jpg`, `.jpeg`, `.gif`
+- 压缩: `.zip`
+
+**示例 - 生成测试用例:**
+
+```bash
+# 为 TypeScript 文件生成测试
+curl -X POST http://localhost:3456/api/skills/run \
+  -F "skill=generate-test" \
+  -F "message=generate unit tests for this file" \
+  -F "files=@utils.ts"
+
+# 为 Python 文件生成测试
+curl -X POST http://localhost:3456/api/skills/run \
+  -F "skill=generate-test" \
+  -F "message=generate unit tests using pytest" \
+  -F "files=@app.py"
+```
+
+**示例 - 调试:**
+
+```bash
+curl -X POST http://localhost:3456/api/skills/run \
+  -F "skill=debug" \
+  -F "message=check recent container logs"
+```
+
+---
+
+### 7. 发送聊天消息 (核心接口)
 
 ```http
 POST /api/chat
@@ -215,9 +290,11 @@ Content-Type: multipart/form-data
 | `group` | string | 否 | main | 组文件夹名称 |
 | `model` | string | 否 | claude-sonnet-4-20250514 | 模型 ID |
 | `tools` | string | 否 | 全部 | 逗号分隔的工具列表 |
+| `skill` | string | 否 | - | 要调用的 Skill 名称 |
 | `files` | file[] | 否 | - | 上传的文件 |
 
 **支持的文件类型:**
+- 代码文件: `.js`, `.ts`, `.jsx`, `.tsx`, `.py`, `.go`, `.java`, `.c`, `.cpp`, `.rs`, `.rb`, `.php`
 - 文档: `.txt`, `.md`, `.json`, `.pdf`
 - 表格: `.csv`, `.xlsx`
 - 图片: `.png`, `.jpg`, `.jpeg`, `.gif`
@@ -246,6 +323,17 @@ curl -X POST http://localhost:3456/api/chat \
 curl -X POST http://localhost:3456/api/chat \
   -F "message=分析这个数据" \
   -F "files=@data.csv"
+
+# 调用 Skill (如 debug)
+curl -X POST http://localhost:3456/api/chat \
+  -F "message=show me recent container logs" \
+  -F "skill=debug"
+
+# 调用 Skill 并上传文件
+curl -X POST http://localhost:3456/api/chat \
+  -F "message=analyze this code for security issues" \
+  -F "skill=customize" \
+  -F "files=@src/index.ts"
 
 # 完整参数
 curl -X POST http://localhost:3456/api/chat \
@@ -472,6 +560,44 @@ class NanoClawClient:
 # 使用
 client = NanoClawClient(api_key="your-key")
 client.chat("分析这个文件", model="claude-opus-4-20250514", files=["data.csv"])
+
+    def run_skill(self, skill: str, message: str, model: str = None,
+                  tools: List[str] = None, files: List[str] = None) -> List[ChatEvent]:
+        """运行指定的 Skill"""
+        url = f'{self.base_url}/api/skills/run'
+        data = {'skill': skill, 'message': message}
+        if model: data['model'] = model
+        if tools: data['tools'] = ','.join(tools)
+        
+        files_data = [('files', (f, open(f, 'rb'))) for f in files] if files else None
+        
+        events = []
+        resp = self.session.post(url, data=data, files=files_data, stream=True)
+        
+        buffer = ''
+        for chunk in resp.iter_content():
+            buffer += chunk.decode()
+            for line in buffer.split('\n'):
+                if line.startswith('data: '):
+                    d = json.loads(line[6:])
+                    events.append(ChatEvent(
+                        type=EventType(d['type']),
+                        text=d.get('text'),
+                        file_id=d.get('fileId'),
+                        filename=d.get('filename'),
+                        error=d.get('error')
+                    ))
+                    if d.get('text'): print(d['text'], end='')
+            buffer = ''
+        return events
+
+# 使用 Skill 生成测试用例
+client = NanoClawClient()
+result = client.run_skill(
+    skill="generate-test",
+    message="generate unit tests for this file",
+    files=["utils.ts"]
+)
 ```
 
 ### Go

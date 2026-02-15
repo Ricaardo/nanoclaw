@@ -71,7 +71,8 @@ export const API_UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 export const API_DOWNLOAD_DIR = path.join(DATA_DIR, 'downloads');
 export const API_MAX_FILE_SIZE = parseInt(process.env.API_MAX_FILE_SIZE || '52428800', 10); // 50MB
 export const API_ALLOWED_EXTENSIONS = [
-  '.pdf', '.txt', '.md', '.json', '.zip', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.docx'
+  '.pdf', '.txt', '.md', '.json', '.zip', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.docx',
+  '.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.java', '.c', '.cpp', '.h', '.rs', '.rb', '.php'
 ];
 
 // API Runner mode: "container" (default) or "local" (use local Claude CLI)

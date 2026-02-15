@@ -113,11 +113,160 @@ export async function startApiServer(): Promise<void> {
     };
   });
 
+  // Get available skills
+  server.get('/api/skills', async () => {
+    const skillsDir = path.join(process.cwd(), '.claude', 'skills');
+    const skills: { name: string; description: string }[] = [];
+    
+    if (fs.existsSync(skillsDir)) {
+      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const skillMdPath = path.join(skillsDir, entry.name, 'SKILL.md');
+          if (fs.existsSync(skillMdPath)) {
+            const content = fs.readFileSync(skillMdPath, 'utf-8');
+            const nameMatch = content.match(/^name:\s*(.+)$/m);
+            const descMatch = content.match(/^description:\s*(.+)$/m);
+            skills.push({
+              name: nameMatch?.[1] || entry.name,
+              description: descMatch?.[1] || '',
+            });
+          }
+        }
+      }
+    }
+    
+    return { skills };
+  });
+
+  // Run a specific skill
+  server.post('/api/skills/run', async (request: FastifyRequest, reply: FastifyReply) => {
+    let skill = '';
+    let message = '';
+    let model = DEFAULT_MODEL;
+    let tools: string[] | undefined;
+    const uploadedFiles: { filename: string; path: string }[] = [];
+    const requestId = randomUUID();
+    const requestDir = path.join(uploadDir, `req-${requestId}`);
+    fs.mkdirSync(requestDir, { recursive: true });
+
+    let connectionId = '';
+    try {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          const ext = path.extname(part.filename).toLowerCase();
+          if (!API_ALLOWED_EXTENSIONS.includes(ext)) {
+            fs.rmSync(requestDir, { recursive: true });
+            return reply.code(400).send({ error: `File type not allowed: ${ext}` });
+          }
+
+          const fileId = randomUUID();
+          const savedFilename = `${fileId}${ext}`;
+          const filePath = path.join(requestDir, savedFilename);
+
+          await part.file.pipe(fs.createWriteStream(filePath));
+          await part.file;
+
+          uploadedFiles.push({ filename: part.filename, path: filePath });
+        } else {
+          const val = part.value;
+          const value = Buffer.isBuffer(val) ? val.toString('utf-8') : String(val);
+
+          if (part.fieldname === 'skill') skill = value.trim();
+          else if (part.fieldname === 'message') message = value;
+          else if (part.fieldname === 'model') {
+            if (value && SUPPORTED_MODELS[value]) model = value;
+          } else if (part.fieldname === 'tools') {
+            if (value) {
+              tools = value.split(',').map((t: string) => t.trim()).filter((t: string) => SUPPORTED_TOOLS[t]);
+            }
+          }
+        }
+      }
+
+      if (!skill) {
+        fs.rmSync(requestDir, { recursive: true });
+        return reply.code(400).send({ error: 'Skill name is required' });
+      }
+
+      // Validate skill exists
+      const skillsDir = path.join(process.cwd(), '.claude', 'skills');
+      const skillPath = path.join(skillsDir, skill, 'SKILL.md');
+      if (!fs.existsSync(skillPath)) {
+        fs.rmSync(requestDir, { recursive: true });
+        return reply.code(404).send({ error: `Skill not found: ${skill}` });
+      }
+
+      // Build message
+      let fullMessage = message;
+      if (uploadedFiles.length > 0) {
+        const fileList = uploadedFiles.map((f) => `- ${f.filename}`).join('\n');
+        fullMessage = `${message}\n\n已上传文件:\n${fileList}\n\n文件路径: ${requestDir}`;
+      }
+
+      // Add skill prefix
+      fullMessage = `/${skill} ${fullMessage}`;
+
+      const workDir = path.join(path.resolve('./groups'), MAIN_GROUP_FOLDER);
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+
+      connectionId = randomUUID();
+      sseConnections.set(connectionId, {
+        write: (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`),
+      });
+
+      const sendSse = (data: Record<string, unknown>) => {
+        const conn = sseConnections.get(connectionId);
+        if (conn) conn.write(JSON.stringify(data));
+      };
+
+      sendSse({ type: 'start', requestId, skill });
+
+      // Run with local Claude
+      const result = await runLocalClaude(fullMessage, { model, tools, workDir });
+
+      if (result.result) {
+        sendSse({ type: 'content', text: result.result });
+      }
+
+      if (result.status === 'error') {
+        sendSse({ type: 'error', error: result.error });
+      }
+
+      sendSse({ type: 'done' });
+      sseConnections.delete(connectionId);
+      reply.raw.end();
+
+      fs.rmSync(requestDir, { recursive: true });
+
+    } catch (err) {
+      logger.error({ err }, 'Skill run error');
+
+      const conn = sseConnections.get(connectionId);
+      if (conn) {
+        conn.write(JSON.stringify({ type: 'error', error: String(err) }));
+        sseConnections.delete(connectionId);
+      }
+
+      if (fs.existsSync(requestDir)) fs.rmSync(requestDir, { recursive: true });
+      if (!reply.raw.writableEnded) reply.raw.end();
+    }
+
+    return reply;
+  });
+
   server.post('/api/chat', async (request: FastifyRequest, reply: FastifyReply) => {
     let message = '';
     let group = MAIN_GROUP_FOLDER;
     let model = DEFAULT_MODEL;
     let tools: string[] | undefined;
+    let skill: string | undefined;
     const uploadedFiles: { filename: string; path: string }[] = [];
     const requestId = randomUUID();
     const requestDir = path.join(uploadDir, `req-${requestId}`);
@@ -174,7 +323,21 @@ export async function startApiServer(): Promise<void> {
             if (value) {
               tools = value.split(',').map((t: string) => t.trim()).filter((t: string) => SUPPORTED_TOOLS[t]);
             }
+          } else if (part.fieldname === 'skill') {
+            if (value) {
+              skill = value.trim();
+            }
           }
+        }
+      }
+
+      // Validate skill if provided
+      if (skill) {
+        const skillsDir = path.join(process.cwd(), '.claude', 'skills');
+        const skillPath = path.join(skillsDir, skill, 'SKILL.md');
+        if (!fs.existsSync(skillPath)) {
+          fs.rmSync(requestDir, { recursive: true });
+          return reply.code(404).send({ error: `Skill not found: ${skill}` });
         }
       }
 
@@ -214,6 +377,11 @@ export async function startApiServer(): Promise<void> {
           .map((f) => `- ${f.filename}`)
           .join('\n');
         fullMessage = `${message}\n\n已上传文件:\n${fileList}\n\n文件路径: ${requestDir}`;
+      }
+
+      // Add skill prefix if specified
+      if (skill) {
+        fullMessage = `/${skill} ${fullMessage}`;
       }
 
       const isMain = group === MAIN_GROUP_FOLDER;
