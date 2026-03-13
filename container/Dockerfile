@@ -45,12 +45,15 @@ COPY agent-runner/package*.json ./
 # Install dependencies
 RUN npm install
 
-# Install Python dependencies for AI Investor skill
+# Install Python dependencies for AI skills (yfinance, pandas, invest_skills)
 RUN pip3 install --no-cache-dir --break-system-packages \
     yfinance>=0.2.36 \
     pandas>=2.0.0 \
     numpy>=1.24.0 \
-    requests>=2.31.0
+    requests>=2.31.0 \
+    akshare>=1.14.0 \
+    beautifulsoup4>=4.12.0 \
+    scipy>=1.10.0
 
 # Copy AI Investor skill scripts
 COPY agent-runner/src/skills/ai-investor/ /workspace/financial-data/scripts/
