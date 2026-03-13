@@ -3,7 +3,7 @@
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium
+# Install system dependencies for Chromium and Python
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -23,7 +23,11 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    python3 \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3 /usr/bin/python
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -41,6 +45,16 @@ COPY agent-runner/package*.json ./
 # Install dependencies
 RUN npm install
 
+# Install Python dependencies for AI Investor skill
+RUN pip3 install --no-cache-dir --break-system-packages \
+    yfinance>=0.2.36 \
+    pandas>=2.0.0 \
+    numpy>=1.24.0 \
+    requests>=2.31.0
+
+# Copy AI Investor skill scripts
+COPY agent-runner/src/skills/ai-investor/ /workspace/financial-data/scripts/
+
 # Copy source code
 COPY agent-runner/ ./
 
@@ -48,7 +62,7 @@ COPY agent-runner/ ./
 RUN npm run build
 
 # Create workspace directories
-RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
+RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input /workspace/financial-data/scripts
 
 # Create entrypoint script
 # Sources env from mounted /workspace/env-dir/env if it exists (workaround for Apple Container -i bug)

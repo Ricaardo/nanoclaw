@@ -105,3 +105,24 @@ export const SUPPORTED_TOOLS: Record<string, string> = {
   'TodoWrite': '任务管理',
   'Task': '子任务调用',
 };
+
+// Feishu configuration
+export const FEISHU_ENABLED = process.env.FEISHU_ENABLED === 'true';
+export const FEISHU_APP_ID = process.env.FEISHU_APP_ID;
+export const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET;
+export const FEISHU_ENCRYPT_KEY = process.env.FEISHU_ENCRYPT_KEY;
+export const FEISHU_VERIFICATION_TOKEN = process.env.FEISHU_VERIFICATION_TOKEN;
+export const FEISHU_ALLOW_FROM = process.env.FEISHU_ALLOW_FROM
+  ? process.env.FEISHU_ALLOW_FROM.split(',')
+  : [];
+
+// Telegram configuration
+export const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true';
+export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+export const TELEGRAM_ALLOWED_USERNAMES = process.env.TELEGRAM_ALLOWED_USERNAMES
+  ? process.env.TELEGRAM_ALLOWED_USERNAMES.split(',')
+  : [];
+export const TELEGRAM_ALLOWED_CHAT_IDS = process.env.TELEGRAM_ALLOWED_CHAT_IDS
+  ? process.env.TELEGRAM_ALLOWED_CHAT_IDS.split(',').map(Number)
+  : [];
+export const TELEGRAM_GROUP_POLICY = process.env.TELEGRAM_GROUP_POLICY || 'mention';

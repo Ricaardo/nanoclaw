@@ -12,8 +12,15 @@ import {
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
   TRIGGER_PATTERN,
+  FEISHU_ENABLED,
+  FEISHU_APP_ID,
+  FEISHU_APP_SECRET,
+  TELEGRAM_ENABLED,
+  TELEGRAM_BOT_TOKEN,
 } from './config.js';
 import { IMessageChannel } from './channels/imessage.js';
+import { FeishuChannel } from './channels/feishu.js';
+import { TelegramChannel } from './channels/telegram.js';
 import { Channel } from './types.js';
 import {
   ContainerOutput,
@@ -503,6 +510,35 @@ async function main(): Promise<void> {
     await imessage.connect();
   } else if (!apiOnly) {
     console.log('\n  Warning: IMESSAGE_CLI_PATH not set, no messaging channel configured');
+  }
+
+  // Create and connect Feishu channel (if enabled)
+  if (!apiOnly && FEISHU_ENABLED && FEISHU_APP_ID && FEISHU_APP_SECRET) {
+    try {
+      const feishu = new FeishuChannel({
+        appId: FEISHU_APP_ID,
+        appSecret: FEISHU_APP_SECRET,
+      });
+      channels.push(feishu);
+      await feishu.connect();
+      console.log('\n  Feishu channel connected');
+    } catch (error) {
+      console.log('\n  Warning: Failed to connect Feishu channel:', error);
+    }
+  }
+
+  // Create and connect Telegram channel (if enabled)
+  if (!apiOnly && TELEGRAM_ENABLED && TELEGRAM_BOT_TOKEN) {
+    try {
+      const telegram = new TelegramChannel({
+        botToken: TELEGRAM_BOT_TOKEN,
+      });
+      channels.push(telegram);
+      await telegram.connect();
+      console.log('\n  Telegram channel connected');
+    } catch (error) {
+      console.log('\n  Warning: Failed to connect Telegram channel:', error);
+    }
   }
 
   // Start subsystems (skip in API-only mode)
